@@ -1,45 +1,101 @@
 import sys
 
-def ler_input_de_stdin():
+factories = {}
+countries = {}
+children = []
+
+def parse_input():
+    global factories, countries, children_by_country
     # Lê todo o conteúdo da entrada padrão
-    dados = sys.stdin.read().strip().splitlines()
-    
+    lines = sys.stdin.read().strip().splitlines()
+
     # Lê a primeira linha com n, m, t
-    n, m, t = map(int, dados[0].split())
+    n, m, t = map(int, lines[0].split())
     
     # Lê as fábricas
-    fabricas = {}
     for i in range(1, n+1):
-        id_fabrica, id_pais, fmax = map(int, dados[i].split())
-        fabricas[id_fabrica] = {'país': id_pais, 'fmax': fmax}
+        factory_id, country_id, stock = map(int, lines[i].split())
+        factories[factory_id] = {'country': country_id, 'stock': stock, 'wanted': 0}
     
     # Lê os países
-    paises = {}
     for i in range(n+1, n+m+1):
-        id_pais, pmax, pmin = map(int, dados[i].split())
-        paises[id_pais] = {'pmax': pmax, 'pmin': pmin}
+        country_id, max_export, min_delivery = map(int, lines[i].split())
+        countries[country_id] = {'max_export': max_export, 'min_delivery': min_delivery, 'current_delivery': 0}
     
     # Lê os pedidos das crianças
-    criancas = []
     for i in range(n+m+1, n+m+t+1):
-        pedido = list(map(int, dados[i].split()))
-        id_crianca = pedido[0]
-        id_pais_crianca = pedido[1]
-        fabrica_onde_os_brinquedos_sao_produzidos = pedido[2:]
-        criancas.append({'id da criança': id_crianca, 'id do país da criança': id_pais_crianca, 'fabrica dos brinquedos': fabrica_onde_os_brinquedos_sao_produzidos})
+        data = list(map(int, lines[i].split()))
+        child_id = data[0]
+        country_id = data[1]
+        factories_list = data[2:]
+        for factory in factories_list:
+            factories[factory]["wanted"] +=1
+        children.append({"id": child_id, "country": country_id, "factories": factories_list})
     
-    return n, m, t, fabricas, paises, criancas
+    return n, m, t
 
-# Exemplo de uso da função
-n, m, t, fabricas, paises, criancas = ler_input_de_stdin()
+def can_country_export(country):
+    return countries[country]["current_delivery"] < countries[country]["max_export"]
 
+def can_factory_produce(factory):
+    return factories[factory]["stock"] > 0;
+
+def export(country, factory):
+    factories[factory]["stock"] -= 1
+    factories[factory]["wanted"] -= 1
+    countries[country]["current_delivery"] += 1
+
+def merry_hanukkah():
+    global factories, countries, children_by_country
+    happy_children = 0
+
+    children.sort(key=lambda c: len(c["factories"]))
+
+    for child in children:
+        country = child["country"]
+        child["factories"].sort(key=lambda factory_id: factories[factory_id]['wanted'])
+        
+        if not can_country_export(country):
+            continue
+        
+        for factory in child["factories"]:
+            if not can_country_export(country):
+                break
+            if can_factory_produce(factory):
+                export(country, factory)
+                happy_children += 1
+                break
+            
+    for country, data in countries.items():
+        if data["current_delivery"] < data["min_delivery"]:
+            return -1
+    
+    return happy_children
+
+if __name__ == "__main__":
+    import sys
+    end_early = False
+    
+    n, m, t = parse_input()
+    if n == 0:
+        end_early = True
+        result = -1
+    
+    if t == 0:
+        end_early = True
+        result = 0
+
+    if not end_early:
+        result = merry_hanukkah()
+    
+    print(result)
 # Aqui, podemos imprimir ou processar os dados conforme necessário
-print("\nn:", n)
-print("m:", m)
-print("t:", t)
-print("Fábricas:", fabricas)
-print("Países:", paises)
-print("Crianças:", criancas)
+#print("\nn:", n)
+#print("m:", m)
+#print("t:", t)
+#print("Fábricas:", fabricas)
+#print("Países:", paises)
+#print("Crianças:", criancas)
 
 
 """
