@@ -31,39 +31,57 @@ def parse_input():
 def solve_lp():
     prob = LpProblem("MerryHanukkah", LpMaximize)
     
+    # Create variables only for valid factory-child combinations
     x = {}
     for child in children:
         for factory in child["factories"]:
-            x[(child["id"], factory)] = LpVariable(f"x_{child['id']}_{factory}", cat="Binary")
-
-    prob += lpSum(x[(child["id"], factory)] for child in children for factory in child["factories"])
+            if factory in factories:  # Verify factory exists
+                x[(child["id"], factory)] = LpVariable(f"x_{child['id']}_{factory}", cat="Binary")
     
+    # Objective: maximize satisfied children
+    prob += lpSum(x[(child["id"], factory)] 
+                for child in children 
+                for factory in child["factories"] 
+                if (child["id"], factory) in x)
+    
+    # Factory stock constraints
     for factory_id, factory in factories.items():
-        prob += lpSum(x[(child["id"], factory_id)] for child in children if factory_id in child["factories"]) <= factory["stock"], f"Factory_{factory_id}_stock"
-    
-    for country_id, country in countries.items():
         prob += lpSum(x[(child["id"], factory_id)] 
-                  for child in children 
-                  for factory_id in child["factories"]
-                  if factories[factory_id]["country"] == country_id 
-                  and factory_id in factories) <= country["max_export"]
-        
+                    for child in children 
+                    if (child["id"], factory_id) in x) <= factory["stock"]
+    
+    # Country export constraints
     for country_id, country in countries.items():
-        prob += lpSum(x[(child["id"], factory_id)] for child in children if child["country"] == country_id for factory_id in child["factories"]) >= country["min_delivery"], f"Country_{country_id}_min_delivery"
+        prob += lpSum(x[(child["id"], factory_id)]
+                    for child in children
+                    for factory_id in child["factories"]
+                    if factories.get(factory_id, {}).get('country') == country_id
+                    and (child["id"], factory_id) in x) <= country["max_export"]
+        
+    # Country minimum delivery constraints
+    for country_id, country in countries.items():
+        prob += lpSum(x[(child["id"], factory_id)]
+                    for child in children
+                    if child["country"] == country_id
+                    for factory_id in child["factories"]
+                    if (child["id"], factory_id) in x) >= country["min_delivery"]
     
+    # One toy per child at most
     for child in children:
-        prob += lpSum(x[(child["id"], factory_id)] for factory_id in child["factories"]) <= 1
+        prob += lpSum(x[(child["id"], factory_id)]
+                    for factory_id in child["factories"]
+                    if (child["id"], factory_id) in x) <= 1
     
+    # Solve with CBC solver, suppressing output
     solver = PULP_CBC_CMD(msg=False)
     prob.solve(solver)
     
-    if prob.status == 1: 
+    # Return result
+    if prob.status == 1:
         return int(prob.objective.value())
-    else:
-        return -1
+    return -1
 
 if __name__ == "__main__":
-    import sys
     n, m, t = parse_input()
     
     if n == 0:
