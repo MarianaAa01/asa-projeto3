@@ -9,22 +9,29 @@ def parse_input():
     global factories, countries, children
     lines = sys.stdin.read().strip().splitlines()
     
-    n, m, t = map(int, lines[0].split())
+    factory_lines = lines[1:n+1]
+    country_lines = lines[n+1:n+m+1]
+    children_lines = lines[n+m+1:n+m+t+1]
     
-    for i in range(1, n + 1):
-        factory_id, country_id, stock = map(int, lines[i].split())
+    # Process factories - use list comprehension for better performance
+    for line in factory_lines:
+        factory_id, country_id, stock = map(int, line.split())
         factories[factory_id] = {'country': country_id, 'stock': stock}
     
-    for i in range(n + 1, n + m + 1):
-        country_id, max_export, min_delivery = map(int, lines[i].split())
-        countries[country_id] = {'max_export': max_export, 'min_delivery': min_delivery, 'current_delivery': 0}
+    # Process countries
+    for line in country_lines:
+        country_id, max_export, min_delivery = map(int, line.split())
+        countries[country_id] = {
+            'max_export': max_export, 
+            'min_delivery': min_delivery, 
+            'current_delivery': 0
+        }
     
-    for i in range(n + m + 1, n + m + t + 1):
-        data = list(map(int, lines[i].split()))
-        child_id = data[0]
-        country_id = data[1]
-        factories_list = data[2:]
-        children.append({"id": child_id, "country": country_id, "factories": factories_list})
+    # Process children - extend is faster than append in a loop
+    children.extend(
+        {"id": data[0], "country": data[1], "factories": data[2:]}
+        for data in (map(int, line.split()) for line in children_lines)
+    )
     
     return n, m, t
 
