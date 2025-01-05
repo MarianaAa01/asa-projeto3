@@ -20,22 +20,34 @@ def parse_input():
             'min_delivery': min_delivery
         }
     
-    # Parse factories - include if stock > 0, regardless of country's max_export
+    # Parse factories
+    factories_per_country = {i: [] for i in range(1, m + 1)}
     for i in range(1, n + 1):
         factory_id, country_id, stock = map(int, lines[i].split())
         factories[factory_id] = {'country': country_id, 'stock': stock}
+        factories_per_country[country_id].append(factory_id)
     
     # Parse children
+    children_by_country = {}
+    factory_to_children = {factory_id: [] for factory_id in factories}
     for i in range(n + m + 1, n + m + t + 1):
         data = list(map(int, lines[i].split()))
         child_id = data[0]
         country_id = data[1]
+        if country_id not in children_by_country:
+            children_by_country[country_id] = []
+        children_by_country[country_id].append(child_id)
         children_per_country[country_id] += 1
-        valid_requests = [f for f in data[2:] if factories[f]["stock"] > 0]
-        #and countries[factories[f]['country']]['max_export'] > 0 and (countries[factories[f]['country']]['max_export'] == 0 and factories[f]['country'] == country_id)]
+        # Add the child to valid factories' list while checking for stock > 0
+        valid_requests = []
+        for factory_id in data[2:]:
+            fac_country_id = factories[factory_id]["country"]
+            if factories[factory_id]["stock"] > 0 and (countries[fac_country_id]["max_export"] > 0 or (countries[fac_country_id]["max_export"] == 0 and country_id == fac_country_id)):
+                factory_to_children[factory_id].append(child_id)
+                valid_requests.append(factory_id)
         children.append({"id": child_id, "country": country_id, "factories": valid_requests})
     
-    return n, t, factories, countries, children, children_per_country
+    return n, t, factories, countries, children, children_per_country, factory_to_children, factories_per_country, children_by_country
 
 def check_min_delivery_feasibility(countries, children_per_country):
     """Check if minimum delivery requirements can potentially be met"""
@@ -46,7 +58,7 @@ def check_min_delivery_feasibility(countries, children_per_country):
     return True
 
 def solve_lp():
-    n, t, factories, countries, children, children_per_country = parse_input()
+    n, t, factories, countries, children, children_per_country, factory_to_children, factories_per_country, children_by_country = parse_input()
     
     if n == 0:
         return -1
@@ -77,9 +89,8 @@ def solve_lp():
     
     # Factory stock constraints
     for factory_id, factory in factories.items():
-        prob += lpSum(x.get(f"{child['id']}_{factory_id}", 0)
-                     for child in children
-                     if factory_id in child["factories"]) <= factory["stock"]
+        prob += lpSum(x.get(f"{child_id}_{factory_id}", 0)
+                    for child_id in factory_to_children[factory_id]) <= factory["stock"]
     
     # One toy per child
     for child in children:
@@ -89,18 +100,17 @@ def solve_lp():
     # Country constraints - combine export and min delivery
     for country_id, country in countries.items():
         # Count toys exported from this country
-        country_exports = lpSum(x.get(f"{child['id']}_{factory_id}", 0)
-                           for child in children
-                           for factory_id in child["factories"]
-                           if factories[factory_id]["country"] == country_id and child["country"] != country_id)
+        country_exports = lpSum(x.get(f"{child}_{factory_id}", 0)
+                                for factory_id in factories_per_country[country_id]  # Only factories in this country
+                                for child in factory_to_children[factory_id]  # For each child this factory can serve
+                                if children[child - 1]['country'] != country_id)  # Exports only count for different countries
     
         prob += country_exports <= country["max_export"]
     
         # Minimum delivery requirement
-        country_deliveries = lpSum(lpSum(x.get(f"{child['id']}_{factory_id}", 0)
-                                 for factory_id in child["factories"])
-                                 for child in children
-                                 if child["country"] == country_id)
+        country_deliveries = lpSum(lpSum(x.get(f"{child}_{factory_id}", 0)
+                                for factory_id in children[child - 1]["factories"])
+                                for child in (children_by_country[country_id] if country_id in children_by_country else []))
         
         if country["min_delivery"] >= 0:
             prob += country_deliveries >= country["min_delivery"]
