@@ -23,8 +23,7 @@ def parse_input():
     # Parse factories - include if stock > 0, regardless of country's max_export
     for i in range(1, n + 1):
         factory_id, country_id, stock = map(int, lines[i].split())
-        if stock > 0:  # Only check stock, not max_export
-            factories[factory_id] = {'country': country_id, 'stock': stock}
+        factories[factory_id] = {'country': country_id, 'stock': stock}
     
     # Parse children
     for i in range(n + m + 1, n + m + t + 1):
@@ -32,10 +31,9 @@ def parse_input():
         child_id = data[0]
         country_id = data[1]
         children_per_country[country_id] += 1
-        valid_requests = [f for f in data[2:] if f in factories and countries[factories[f]['country']]['max_export'] > 0]
-        
-        if len(valid_requests) > 0:
-            children.append({"id": child_id, "country": country_id, "factories": valid_requests})
+        valid_requests = [f for f in data[2:] if factories[f]["stock"] > 0]
+        #and countries[factories[f]['country']]['max_export'] > 0 and (countries[factories[f]['country']]['max_export'] == 0 and factories[f]['country'] == country_id)]
+        children.append({"id": child_id, "country": country_id, "factories": valid_requests})
     
     return n, t, factories, countries, children, children_per_country
 
@@ -55,9 +53,6 @@ def solve_lp():
     if t == 0:
         return 0
     
-    if not children:
-        return 0
-    
     # Check if minimum delivery requirements are feasible
     if not check_min_delivery_feasibility(countries, children_per_country):
         return -1
@@ -67,6 +62,8 @@ def solve_lp():
     # Decision variables
     x = {}
     for child in children:
+        if not child["factories"]:  # If the child has no valid factories, they can't get a present
+            continue
         for factory_id in child["factories"]:
             x[f"{child['id']}_{factory_id}"] = LpVariable(
                 f"x_{child['id']}_{factory_id}", 
@@ -76,7 +73,7 @@ def solve_lp():
     # Objective: Maximize satisfied children
     prob += lpSum(lpSum(x.get(f"{child['id']}_{factory_id}", 0)
                        for factory_id in child["factories"])
-                  for child in children)
+                       for child in children if child["factories"])
     
     # Factory stock constraints
     for factory_id, factory in factories.items():
@@ -95,15 +92,15 @@ def solve_lp():
         country_exports = lpSum(x.get(f"{child['id']}_{factory_id}", 0)
                            for child in children
                            for factory_id in child["factories"]
-                           if factories[factory_id]["country"] == country_id)
+                           if factories[factory_id]["country"] == country_id and child["country"] != country_id)
     
         prob += country_exports <= country["max_export"]
     
-        # Minimum delivery requirement (ensure it accounts for both max export and min delivery)
+        # Minimum delivery requirement
         country_deliveries = lpSum(lpSum(x.get(f"{child['id']}_{factory_id}", 0)
-                                     for factory_id in child["factories"] )
-                                     for child in children
-                                     if child["country"] == country_id)
+                                 for factory_id in child["factories"])
+                                 for child in children
+                                 if child["country"] == country_id)
         
         if country["min_delivery"] >= 0:
             prob += country_deliveries >= country["min_delivery"]
